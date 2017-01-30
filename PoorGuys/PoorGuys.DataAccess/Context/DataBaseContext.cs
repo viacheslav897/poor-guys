@@ -5,15 +5,16 @@ namespace PoorGuys.DataAccess.Context
 {
     internal class DataBaseContext : DbContext
     {
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        public DataBaseContext(DbContextOptions options)
+            : base(options)
         {
             
-            base.OnConfiguring(optionsBuilder);
         }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            base.OnModelCreating(modelBuilder);
+            optionsBuilder.UseSqlServer(@"data source=(local);Initial Catalog=PoorGuys_DEV;integrated security=True;");
+            base.OnConfiguring(optionsBuilder);
         }
     }
 }

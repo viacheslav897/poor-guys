@@ -1,37 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Data.Common;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace PoorGuys.DataAccess.Context
 {
-    public class ContextWrapper<T> : IContextWrapper where T : DbContext
+    public class ContextWrapper : IContextWrapper
     {
-        private IsolationLevel _isolationLevel = IsolationLevel.Unspecified;
+        private readonly DbContext _context;
 
-        private DbTransaction _transaction;
+        private IDbContextTransaction _transaction;
 
-        private DbConnection _connection;
+        private readonly bool _useTransaction = true;
 
-        private bool _useTransaction = true;
-
-        private string _connectionString;
-
-        private DbContext _context;
+        public ContextWrapper(DbContext context)
+        {
+            _context = context;
+        }
 
         public void CommitTransaction(bool startNewTransaction = false)
         {
             if (_useTransaction)
             {
-                if (_transaction?.Connection != null)
-                {
-                    _transaction.Commit();
-                }
+                _transaction?.Commit();
 
                 if (startNewTransaction)
                 {
@@ -40,26 +33,11 @@ namespace PoorGuys.DataAccess.Context
             }
         }
 
-        internal void StartTransaction()
-        {
-            if (_useTransaction)
-            {
-                if (_transaction?.Connection == null)
-                {
-                    _transaction = _connection.BeginTransaction(_isolationLevel);
-                }
-
-            }
-        }
-
         public void RollBack()
         {
             if (_useTransaction)
             {
-                if (_transaction?.Connection != null)
-                {
-                    _transaction.Rollback();
-                }
+                _transaction?.Rollback();
             }
         }
 
@@ -92,14 +70,25 @@ namespace PoorGuys.DataAccess.Context
                 });
         }
 
-        public void SaveChanges()
-        {
-            _context?.SaveChanges();
-        }
-
         public void SetState(object entity, EntityState state)
         {
             _context.Entry(entity).State = state;
+        }
+
+        internal void StartTransaction()
+        {
+            if (_useTransaction)
+            {
+                if (_transaction == null)
+                {
+                    _transaction = _context.Database.BeginTransaction();
+                }
+            }
+        }
+
+        public void SaveChanges()
+        {
+            _context?.SaveChanges();
         }
 
         private void ProcessTransactionableMethod(Action action)
@@ -127,14 +116,6 @@ namespace PoorGuys.DataAccess.Context
             return entities;
         }
 
-
-        private void CreateContextInstance()
-        {
-            _context = !string.IsNullOrEmpty(_connectionString)
-                ? (DbContext)Activator.CreateInstance(typeof(T), _connectionString)
-                : (DbContext)Activator.CreateInstance(typeof(T));
-        }
-
         private void SetUnchangedTrakingEntities()
         {
             var trakingEntities = _context.ChangeTracker.Entries();
@@ -147,7 +128,7 @@ namespace PoorGuys.DataAccess.Context
         private void DetachAllUnchangedEntities()
         {
             var objectStateEntries =
-                            _context.ChangeTracker.Entries().Where(e => e.State == EntityState.Unchanged);
+                _context.ChangeTracker.Entries().Where(e => e.State == EntityState.Unchanged);
             foreach (var objectStateEntry in objectStateEntries)
             {
                 objectStateEntry.State = EntityState.Detached;
